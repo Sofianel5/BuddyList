@@ -75,3 +75,56 @@ clj꞉buddylist.users꞉> 
 clj꞉buddylist.users꞉> 
 {\s {\o {\f {\i {\a {\n {\e nil}}}}}}}
 clj꞉buddylist.users꞉> 
+#'buddylist.users/create-user!
+clj꞉buddylist.users꞉> 
+{\s {\o {\f {\i {\a {\n {\e nil}}}}}},
+ "sofiane"
+ {:username "sofiane",
+  :password-hash "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8",
+  :phone "9179570254",
+  :buddies [],
+  :auth-token ""}}
+clj꞉buddylist.users꞉> 
+{\s {\o {\f {\i {\a {\n {\e nil}}}}}},
+ "sofiane"
+ {:username "sofiane",
+  :password-hash "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8",
+  :phone "9179570254",
+  :buddies [],
+  :auth-token ""}}
+clj꞉buddylist.users꞉> 
+{\s {\o {\f {\i {\a {\n {\e nil}}}}}},
+ "sofiane"
+ {:username "sofiane",
+  :password-hash "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8",
+  :phone "9179570254",
+  :buddies [],
+  :auth-token ""}}
+clj꞉buddylist.users꞉> 
+{:username "sofiane",
+ :password-hash "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8",
+ :phone "9179570254",
+ :buddies [],
+ :auth-token ""}
+clj꞉buddylist.users꞉> 
+"sofiane"
+clj꞉buddylist.users꞉> 
+"9179570254"
+clj꞉buddylist.users꞉> 
+nil
+clj꞉buddylist.users꞉> 
+; Syntax error compiling at (src/buddylist/users.clj:0:0).
+; Unable to resolve symbol: sofiane in this context
+clj꞉buddylist.users꞉> 
+nil
+clj꞉buddylist.users꞉> 
+{:username "sofiane",
+ :password-hash "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8",
+ :phone "9179570254",
+ :buddies [],
+ :auth-token ""}
+clj꞉buddylist.users꞉> 
+"sofiane"
+clj꞉buddylist.users꞉> 
+"sofiane"
+clj꞉buddylist.users꞉> 
