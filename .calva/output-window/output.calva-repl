@@ -5,4 +5,73 @@
 ; Happy coding! ♥️
 
 ; Jacking in...
-; Starting Jack-in Terminal: clojure -Sdeps '{:deps {nrepl/nrepl {:mvn/version,"0.8.3"},cider/cider-nrepl {:mvn/version,"0.25.8"}}}' -A:run
+; Starting Jack-in Terminal: clojure -Sdeps '{:deps {nrepl/nrepl {:mvn/version,"0.8.3"},cider/cider-nrepl {:mvn/version,"0.25.8"}}}'  -m nrepl.cmdline --middleware "[cider.nrepl/cider-middleware]"
+; Hooking up nREPL sessions...
+; Connected session: clj
+; TIPS: 
+;   - You can edit the contents here. Use it as a REPL if you like.
+;   - `alt+enter` evaluates the current top level form.
+;   - `ctrl+enter` evaluates the current form.
+;   - `alt+up` and `alt+down` traverse up and down the REPL command history
+;      when the cursor is after the last contents at the prompt
+;   - Clojure lines in stack traces are peekable and clickable.
+clj꞉user꞉>  ; Use `alt+enter` to evaluate
+; Jack-in done.
+clj꞉user꞉> 
+; Syntax error compiling at (src/buddylist/users.clj:13:1).
+; Unable to resolve symbol: sha256 in this context
+clj꞉buddylist.users꞉> 
+; Syntax error compiling at (src/buddylist/users.clj:14:3).
+; Unable to resolve symbol: sha256 in this context
+clj꞉buddylist.users꞉> 
+; Syntax error compiling at (src/buddylist/users.clj:9:1).
+; Unable to resolve symbol: defn in this context
+clj꞉buddylist.users꞉> 
+clojure.lang.Compiler/analyze (Compiler.java:6812)
+clojure.lang.Compiler$InvokeExpr/parse (Compiler.java:3824)
+clojure.lang.Compiler/analyzeSeq (Compiler.java:7113)
+clojure.lang.Compiler/analyze (Compiler.java:6793)
+clojure.lang.Compiler/eval (Compiler.java:7185)
+clojure.core/eval (core.clj:3202)
+clojure.core/eval (core.clj:3198)
+nrepl.middleware.interruptible-eval/evaluate (interruptible_eval.clj:87)
+clojure.core/apply (core.clj:667)
+clojure.core/with-bindings* (core.clj:1977)
+nrepl.middleware.interruptible-eval/evaluate (interruptible_eval.clj:87)
+clojure.main/repl (main.clj:437)
+clojure.main/repl (main.clj:458)
+clojure.main/repl (main.clj:368)
+nrepl.middleware.interruptible-eval/evaluate (interruptible_eval.clj:84)
+nrepl.middleware.interruptible-eval/evaluate (interruptible_eval.clj:56)
+nrepl.middleware.interruptible-eval/interruptible-eval (interruptible_eval.clj:152)
+nrepl.middleware.session/session-exec (session.clj:202)
+nrepl.middleware.session/session-exec (session.clj:201)
+java.lang.Thread/run (Thread.java:834)
+clj꞉buddylist.users꞉> 
+nil
+clj꞉buddylist.users꞉> 
+#'buddylist.users/data
+clj꞉buddylist.users꞉> 
+#'buddylist.users/sha256
+clj꞉buddylist.users꞉> 
+"ef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d"
+clj꞉buddylist.users꞉> 
+#'buddylist.users/delete-user!
+clj꞉buddylist.users꞉> 
+#'buddylist.users/create-user!
+clj꞉buddylist.users꞉> 
+; Execution error (ClassCastException) at buddylist.users/create-user! (REPL:18).
+; class duratom.core.Duratom cannot be cast to class clojure.lang.Associative (duratom.core.Duratom is in unnamed module of loader clojure.lang.DynamicClassLoader @69a2055c; clojure.lang.Associative is in unnamed module of loader 'app')
+clj꞉buddylist.users꞉> 
+#'buddylist.users/create-user!
+clj꞉buddylist.users꞉> 
+{\s {\o {\f {\i {\a {\n {\e nil}}}}}}}
+clj꞉buddylist.users꞉> 
+{\s {\o {\f {\i {\a {\n {\e nil}}}}}}}
+clj꞉buddylist.users꞉> 
+#'buddylist.users/create-user!
+clj꞉buddylist.users꞉> 
+{\s {\o {\f {\i {\a {\n {\e nil}}}}}}}
+clj꞉buddylist.users꞉> 
+{\s {\o {\f {\i {\a {\n {\e nil}}}}}}}
+clj꞉buddylist.users꞉> 
