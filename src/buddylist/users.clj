@@ -21,7 +21,7 @@
 (comment
   (create-user! "sofiane" "password" "9179570254"))
   (comment
-    @data
+    (-> @data (get "sofiane") :username)
   )
 
 (defn delete-user! [username])
