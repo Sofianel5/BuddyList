@@ -1,33 +1,31 @@
 (ns buddylist.core
-    (:require [org.httpkit.server :as http-kit]
-              [compojure.route :only [files not-found]]
-              [compojure.core :only [defroutes GET POST DELETE ANY context]]))
+  (:require [org.httpkit.server :as http-kit]
+            [buddylist.users :as users]
+            [compojure.core :refer :all]
+            [compojure.route :as route]))
 
 (defn render [req]
   (println (pr-str req))
   {:status 200
    :headers {"Content-Type" "text/plain"}
    :body "Hello World"})
-  
+
 (defn sign-up [req]
   (let [new-user (users/create-user! (-> req :params :username) (-> req :params :cleartext-password) (-> req :params :phone))]
-    {
-      :status 201
-      :body {}
-    }
-  ))
+    {:status 201
+     :body {"user" new-user}})) ;; Aaron: Should I return a map or stringified json?
 
 (defn handler [request]
-  (with-channel request channel
-    (on-close channel (fn [status] (println "channel closed: " status)))
-    (on-receive channel (fn [data] ;; echo it back
-                          (send! channel data)))))
+  (let [channel "handler"]
+    (http-kit/with-channel request channel
+      (http-kit/on-close channel (fn [status] (println "channel closed: " status)))
+      (http-kit/on-receive channel (fn [data] ;; echo it back
+                                     (http-kit/send! channel data))))))
 
 (defroutes all-routes
   (GET "/" [] render)
   (GET "/ws" [] handler)     ;; websocket
-  (files "/static/") ;; static file url prefix /static, in `public` folder
-  (not-found "<p>Page not found.</p>")) ;; all other, return 404
+  (route/not-found "<p>Page not found.</p>")) ;; all other, return 404
 
 (defn -main [& args]
   (let [p 8000]
