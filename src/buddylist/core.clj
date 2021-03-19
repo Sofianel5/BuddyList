@@ -1,12 +1,7 @@
 (ns buddylist.core
     (:require [org.httpkit.server :as http-kit]
-              [duratom.core :as duratom]
               [compojure.route :only [files not-found]]
               [compojure.core :only [defroutes GET POST DELETE ANY context]]))
-
-(duratom :local-file
-         :file-path "/home/ubuntu/BuddyList/data.duratom"
-         :init {:x 1 :y 2})
 
 (defn render [req]
   (println (pr-str req))
