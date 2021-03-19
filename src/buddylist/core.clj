@@ -8,6 +8,14 @@
   {:status 200
    :headers {"Content-Type" "text/plain"}
    :body "Hello World"})
+  
+(defn sign-up [req]
+  (let [new-user (users/create-user! (-> req :params :username) (-> req :params :cleartext-password) (-> req :params :phone))]
+    {
+      :status 201
+      :body {}
+    }
+  ))
 
 (defn handler [request]
   (with-channel request channel
