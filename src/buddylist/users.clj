@@ -11,7 +11,7 @@
 (def buddies (duratom/duratom :local-file
                               :file-path (doto (io/file "./data/buddies.duratom")
                                            (io/make-parents))
-                              :init #{}))
+                              :init {})) ;; Map of #{user-a user-b}, <Messages>[]
 
 (defn hashpw [raw]
   (BCrypt/hashpw raw (BCrypt/gensalt 12)))
@@ -34,9 +34,8 @@
     user))
 
 (defn delete-user! [username]
-  (swap! buddies remove #(some #{username} %))
-  (swap! users dissoc username)
-)
+  (swap! buddies (fn [x] (into {} (filter #(contains? % username) x))))
+  (swap! users dissoc username))
 
 ;; TODO: might be nice to support a set of auth tokens so user can be logged in from
 ;; multiple clients.
@@ -44,10 +43,10 @@
   (swap! users assoc-in [username :auth-token] token))
 
 (defn create-buddies! [username-one username-two]
-  (swap! buddies conj #{username-one username-two}))
+  (swap! buddies assoc #{username-one username-two} []))
 
 (defn remove-buddies! [username-one username-two]
-  (swap! buddies disj #{username-one username-two}))
+  (swap! buddies dissoc #{username-one username-two}))
 
 (comment
   (set-auth-token! "sofiane" (gen-auth-token))
