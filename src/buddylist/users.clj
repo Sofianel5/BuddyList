@@ -22,7 +22,8 @@
                               :password-hash (hashpw cleartext-password)
                               :phone phone
                               :buddies []
-                              :auth-token ""}))
+                              :auth-token nil}))
+
 (comment
   @data
   (reset! data {})
@@ -33,9 +34,19 @@
   )
 
 (defn delete-user! [username]
-  ;; TODO: implement
+  (swap! data dissoc username))
+
+(comment
+  (delete-user! "sofiane")
+  @data
   )
 
+;; TODO: might be nice to support a set of auth tokens so user can be logged in from
+;; multiple clients.
 (defn set-auth-token! [username token]
-  ;; TODO: swap the atom?
-  (assoc (get data username) :auth-token token))
+  (swap! data assoc-in [username :auth-token] token))
+
+(comment
+  (set-auth-token! "sofiane" (gen-auth-token))
+  data
+  )
