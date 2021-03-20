@@ -3,10 +3,15 @@
             [duratom.core :as duratom])
   (:import org.mindrot.jbcrypt.BCrypt))
 
-(def data (duratom/duratom :local-file
+(def users (duratom/duratom :local-file
                            :file-path (doto (io/file "./data/users.duratom")
                                          (io/make-parents))
                            :init {}))
+
+(def buddies (duratom/duratom :local-file
+                            :file-path (doto (io/file "./data/buddies.duratom")
+                                         (io/make-parents))
+                            :init #{}))
 
 (defn hashpw [raw]
   (BCrypt/hashpw raw (BCrypt/gensalt 12)))
@@ -18,35 +23,37 @@
   (.toString (java.util.UUID/randomUUID)))
 
 (defn create-user! [username cleartext-password phone]
-  (swap! data assoc username {:username username
+  (swap! users assoc username {:username username
                               :password-hash (hashpw cleartext-password)
                               :phone phone
                               :buddies []
                               :auth-token nil}))
 
-(comment
-  @data
-  (reset! data {})
-  (create-user! "sofiane" "password" "9179570254")
-  (-> @data (get "sofiane") :username)
-  (checkpw "password" (get-in @data ["sofiane" :password-hash]))
-  (checkpw "bad" (get-in @data ["sofiane" :password-hash]))
-  )
-
 (defn delete-user! [username]
-  (swap! data dissoc username))
-
-(comment
-  (delete-user! "sofiane")
-  @data
-  )
+  (swap! users dissoc username))
 
 ;; TODO: might be nice to support a set of auth tokens so user can be logged in from
 ;; multiple clients.
 (defn set-auth-token! [username token]
-  (swap! data assoc-in [username :auth-token] token))
+  (swap! users assoc-in [username :auth-token] token))
+
+(defn create-buddies! [username-one username-two]
+  (swap! buddies conj #{username-one username-two}))
+
+(defn remove-buddies! [username-one username-two]
+  (swap! buddies disj #{username-one username-two}))
 
 (comment
   (set-auth-token! "sofiane" (gen-auth-token))
-  data
+  users
   )
+(comment
+  (create-user! "sofiane" "password" "9179570254")
+  (create-user! "liam" "password" "9179570254")
+  (-> @users (get "sofiane") :username)
+  (create-buddies! "liam" "sofiane")
+  @buddies
+  (remove-buddies! "liam" "sofiane")
+  (delete-user! "sofiane")
+  @users
+)
