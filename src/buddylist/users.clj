@@ -4,14 +4,14 @@
   (:import org.mindrot.jbcrypt.BCrypt))
 
 (def users (duratom/duratom :local-file
-                           :file-path (doto (io/file "./data/users.duratom")
+                            :file-path (doto (io/file "./data/users.duratom")
                                          (io/make-parents))
-                           :init {}))
+                            :init {}))
 
 (def buddies (duratom/duratom :local-file
-                            :file-path (doto (io/file "./data/buddies.duratom")
-                                         (io/make-parents))
-                            :init #{}))
+                              :file-path (doto (io/file "./data/buddies.duratom")
+                                           (io/make-parents))
+                              :init #{}))
 
 (defn hashpw [raw]
   (BCrypt/hashpw raw (BCrypt/gensalt 12)))
@@ -22,12 +22,16 @@
 (defn gen-auth-token []
   (.toString (java.util.UUID/randomUUID)))
 
+;; returns new user map
+;; TODO: fail if username already exists?
 (defn create-user! [username cleartext-password phone]
-  (swap! users assoc username {:username username
-                              :password-hash (hashpw cleartext-password)
-                              :phone phone
-                              :buddies []
-                              :auth-token nil}))
+  (let [user {:username username
+              :password-hash (hashpw cleartext-password)
+              :phone phone
+              :buddies []
+              :auth-token nil}]
+    (swap! users assoc username user)
+    user))
 
 (defn delete-user! [username]
   (swap! users dissoc username))
