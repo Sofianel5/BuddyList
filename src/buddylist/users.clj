@@ -1,52 +1,47 @@
 (ns buddylist.users
-  (:require [clojure.java.io :as io]
-            [duratom.core :as duratom])
-  (:import org.mindrot.jbcrypt.BCrypt))
+  (:require [duratom.core :as duratom])
+  (:import [java.security MessageDigest]))
 
-(def data (duratom/duratom :local-file
-                           :file-path (doto (io/file "./data/users.duratom")
-                                         (io/make-parents))
-                           :init {}))
+(def users (duratom/duratom :local-file
+                            :file-path "/home/ubuntu/BuddyList/users.duratom"
+                            :init {}))
+(def buddies (duratom/duratom :local-file
+                              :file-path "/home/ubuntu/BuddyList/buddies.duratom"
+                              :init []))
 
-(defn hashpw [raw]
-  (BCrypt/hashpw raw (BCrypt/gensalt 12)))
-
-(defn checkpw [raw hashed]
-  (boolean (BCrypt/checkpw raw hashed)))
+(defn sha256 [string]
+  (let [digest (.digest (MessageDigest/getInstance "SHA-256") (.getBytes string "UTF-8"))]
+    (apply str (map (partial format "%02x") digest))))
 
 (defn gen-auth-token []
-  (.toString (java.util.UUID/randomUUID)))
+  (sha256 (str 1)))
 
 (defn create-user! [username cleartext-password phone]
-  (swap! data assoc username {:username username
-                              :password-hash (hashpw cleartext-password)
-                              :phone phone
-                              :buddies []
-                              :auth-token nil}))
-
-(comment
-  @data
-  (reset! data {})
-  (create-user! "sofiane" "password" "9179570254")
-  (-> @data (get "sofiane") :username)
-  (checkpw "password" (get-in @data ["sofiane" :password-hash]))
-  (checkpw "bad" (get-in @data ["sofiane" :password-hash]))
-  )
+  (get (swap! users assoc username {:username username
+                                    :password-hash (sha256 cleartext-password)
+                                    :phone phone
+                                    :buddies []
+                                    :auth-token ""}) username))
 
 (defn delete-user! [username]
-  (swap! data dissoc username))
+  (swap! users dissoc username)
+  (swap! buddies filterv (fn [x] (= (some #(= % username) x) nil))))
+
+(defn create-buddies! [username-one username-two]
+  (swap! buddies conj [username-one username-two]))
+
+(defn remove-buddies! [username-one username-two]
+  (swap! buddies (fn [x] filterv #(not= [username-one username-two] %) x)))
 
 (comment
+  (create-user! "sofiane" "password" "9179570254")
+  (create-user! "liam" "password" "9179570254")
+  (-> @users (get "sofiane") :username)
+  (create-buddies! "liam" "sofiane")
+  @buddies
+  (remove-buddies! "liam" "sofiane")
   (delete-user! "sofiane")
-  @data
-  )
+  @users)
 
-;; TODO: might be nice to support a set of auth tokens so user can be logged in from
-;; multiple clients.
 (defn set-auth-token! [username token]
-  (swap! data assoc-in [username :auth-token] token))
-
-(comment
-  (set-auth-token! "sofiane" (gen-auth-token))
-  data
-  )
+  (assoc (get users username) :auth-token token))
