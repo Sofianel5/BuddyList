@@ -1,33 +1,45 @@
 (ns buddylist.core
-  (:require [org.httpkit.server :as http-kit]
-            [buddylist.users :as users]
+  (:require [buddylist.users :as users]
+            [cheshire.core :as json]
             [compojure.core :refer :all]
-            [compojure.route :as route]))
+            [compojure.route :as route]
+            [org.httpkit.server :as http-kit]
+            [ring.util.response :as response]))
 
-(defn render [req]
+(defn render-index [req]
   (println (pr-str req))
-  {:status 200
-   :headers {"Content-Type" "text/plain"}
-   :body "Hello World"})
+  (-> (response/response "Hello World")
+      (response/content-type "text/plain")))
 
-(defn sign-up [req]
-  (let [new-user (users/create-user! (-> req :params :username) (-> req :params :cleartext-password) (-> req :params :phone))]
-    {:status 201
-     :body {"user" new-user}})) ;; Aaron: Should I return a map or stringified json?
+(defn render-sign-up [req]
+  (let [{:keys [username cleartext-password phone]} (:params req)
+        user (users/create-user! username cleartext-password phone)]
+    (-> user
+        json/generate-string
+        response/response
+        (response/content-type "application/json")
+        (response/charset "utf-8")
+        (response/status 201))))
 
-(defn handler [request]
+(comment
+  (render-sign-up {:params {:username "test"
+                            :cleartext-password "password"
+                            :phone "555-555-5555"}})
+  )
+
+(defn ws-handler [req]
   (let [channel "handler"]
-    (http-kit/with-channel request channel
+    (http-kit/with-channel req channel
       (http-kit/on-close channel (fn [status] (println "channel closed: " status)))
       (http-kit/on-receive channel (fn [data] ;; echo it back
                                      (http-kit/send! channel data))))))
 
 (defroutes all-routes
-  (GET "/" [] render)
-  (GET "/ws" [] handler)     ;; websocket
+  (GET "/" [] render-index)
+  (GET "/ws" [] ws-handler)
   (route/not-found "<p>Page not found.</p>")) ;; all other, return 404
 
 (defn -main [& args]
   (let [p 8000]
-    (http-kit/run-server all-routes {:ip "0.0.0.0", :port p})
+    (http-kit/run-server #'all-routes {:ip "0.0.0.0", :port p})
     (println "Server running on port" p)))

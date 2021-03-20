@@ -17,12 +17,15 @@
 (defn gen-auth-token []
   (.toString (java.util.UUID/randomUUID)))
 
+;; returns new user map
 (defn create-user! [username cleartext-password phone]
-  (swap! data assoc username {:username username
-                              :password-hash (hashpw cleartext-password)
-                              :phone phone
-                              :buddies []
-                              :auth-token nil}))
+  (let [user {:username username
+              :password-hash (hashpw cleartext-password)
+              :phone phone
+              :buddies []
+              :auth-token nil}]
+    (swap! data assoc username user)
+    user))
 
 (comment
   @data
