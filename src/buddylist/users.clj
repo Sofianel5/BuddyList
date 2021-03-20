@@ -34,7 +34,9 @@
     user))
 
 (defn delete-user! [username]
-  (swap! users dissoc username))
+  (swap! buddies remove #(some #{username} %))
+  (swap! users dissoc username)
+)
 
 ;; TODO: might be nice to support a set of auth tokens so user can be logged in from
 ;; multiple clients.
