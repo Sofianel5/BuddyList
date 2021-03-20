@@ -17,17 +17,20 @@
 
 (defn create-user! [username cleartext-password phone]
   (swap! data assoc username {:username username
-                                   :password-hash (sha256 cleartext-password)
-                                   :phone phone
-                                   :buddies []
-                                   :auth-token ""}))
+                              :password-hash (sha256 cleartext-password)
+                              :phone phone
+                              :buddies []
+                              :auth-token ""}))
 (comment
-  (create-user! "sofiane" "password" "9179570254"))
-  (comment
-    (-> @data (get "sofiane") :username)
+  @data
+  (create-user! "sofiane" "password" "9179570254")
+  (-> @data (get "sofiane") :username)
   )
 
-(defn delete-user! [username])
+(defn delete-user! [username]
+  ;; TODO: implement
+  )
 
 (defn set-auth-token! [username token]
+  ;; TODO: swap the atom?
   (assoc (get data username) :auth-token token))
