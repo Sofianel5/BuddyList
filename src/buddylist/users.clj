@@ -53,6 +53,7 @@
   (set-auth-token! "sofiane" (gen-auth-token))
   users
   )
+
 (comment
   (create-user! "sofiane" "password" "9179570254")
   (create-user! "liam" "password" "9179570254")
