@@ -25,16 +25,15 @@
 
 ;; returns new user map
 (defn create-user! [username cleartext-password phone]
-  ;; Is there a quicker way to do not contains?
-  (if (not (contains? @users username)) (let [user {:username username
-                                              :password-hash (hashpw cleartext-password)
-                                              :phone phone
-                                              :buddies []
-                                              :auth-token nil
-                                              :status nil}]
-                                    (swap! users assoc username user)
-                                    user)
-      nil))
+  ;; Is there a quick way to do not contains? besides wrapping it in a not
+  (if (contains? @users username) nil (let [user {:username username
+                                                  :password-hash (hashpw cleartext-password)
+                                                  :phone phone
+                                                  :buddies []
+                                                  :auth-token nil
+                                                  :status nil}]
+                                        (swap! users assoc username user)
+                                        user)))
 
 (defn delete-user! [username]
   (swap! buddies (fn [x] (into {} (filter #(contains? % username) x))))
@@ -48,7 +47,7 @@
 
 ;; TODO: Do nothing if buddies exist
 (defn create-buddies! [username-one username-two]
-  (swap! buddies assoc #{username-one username-two} []))
+  (if (contains? @buddies #{username-one username-two}) nil (swap! buddies assoc #{username-one username-two} [])))
 
 (defn remove-buddies! [username-one username-two]
   (swap! buddies dissoc #{username-one username-two}))
@@ -57,6 +56,7 @@
   (swap! users assoc-in [username :status] status))
 
 (defn send-message! [from to message]
+  ;; Is there a difference here between assoc and assoc-in 
   (swap! buddies assoc-in [#{from to}] (conj (get @buddies #{from to}) {:from from
                                                                         :to to
                                                                         :time (java-time/local-date-time)
