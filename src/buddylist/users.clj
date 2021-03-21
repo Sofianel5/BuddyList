@@ -1,6 +1,7 @@
 (ns buddylist.users
   (:require [clojure.java.io :as io]
-            [duratom.core :as duratom])
+            [duratom.core :as duratom]
+            [java-time])
   (:import org.mindrot.jbcrypt.BCrypt))
 
 (def users (duratom/duratom :local-file
@@ -24,13 +25,15 @@
 
 ;; returns new user map
 (defn create-user! [username cleartext-password phone]
-  (if (contains? @users username) (let [user {:username username
-                                             :password-hash (hashpw cleartext-password)
-                                             :phone phone
-                                             :buddies []
-                                             :auth-token nil}]
-                                   (swap! users assoc username user)
-                                   user)
+  ;; Is there a quicker way to do not contains?
+  (if (not (contains? @users username)) (let [user {:username username
+                                              :password-hash (hashpw cleartext-password)
+                                              :phone phone
+                                              :buddies []
+                                              :auth-token nil
+                                              :status nil}]
+                                    (swap! users assoc username user)
+                                    user)
       nil))
 
 (defn delete-user! [username]
@@ -38,15 +41,26 @@
   (swap! users dissoc username))
 
 ;; TODO: might be nice to support a set of auth tokens so user can be logged in from
-;; multiple clients.
+;; multiple clients. 
+;;(Question: is it bad if multiple clients to use the same auth token?)
 (defn set-auth-token! [username token]
   (swap! users assoc-in [username :auth-token] token))
 
+;; TODO: Do nothing if buddies exist
 (defn create-buddies! [username-one username-two]
   (swap! buddies assoc #{username-one username-two} []))
 
 (defn remove-buddies! [username-one username-two]
   (swap! buddies dissoc #{username-one username-two}))
+
+(defn set-status! [username status]
+  (swap! users assoc-in [username :status] status))
+
+(defn send-message! [from to message]
+  (swap! buddies assoc-in [#{from to}] (conj (get @buddies #{from to}) {:from from
+                                                                        :to to
+                                                                        :time (java-time/local-date-time)
+                                                                        :message message})))
 
 (comment
   (set-auth-token! "sofiane" (gen-auth-token))
@@ -60,4 +74,7 @@
   @buddies
   (remove-buddies! "liam" "sofiane")
   (delete-user! "sofiane")
+  (set-status! "sofiane" "Coding BuddyList")
+  (send-message! "sofiane" "liam" "Did u finish beatstreet?")
+  (send-message! "liam" "sofiane" "Yes! Do you want to see?")
   @users)
