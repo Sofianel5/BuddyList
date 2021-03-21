@@ -23,15 +23,15 @@
   (.toString (java.util.UUID/randomUUID)))
 
 ;; returns new user map
-;; TODO: fail if username already exists?
 (defn create-user! [username cleartext-password phone]
-  (let [user {:username username
-              :password-hash (hashpw cleartext-password)
-              :phone phone
-              :buddies []
-              :auth-token nil}]
-    (swap! users assoc username user)
-    user))
+  (if (contains? @users username) (let [user {:username username
+                                             :password-hash (hashpw cleartext-password)
+                                             :phone phone
+                                             :buddies []
+                                             :auth-token nil}]
+                                   (swap! users assoc username user)
+                                   user)
+      nil))
 
 (defn delete-user! [username]
   (swap! buddies (fn [x] (into {} (filter #(contains? % username) x))))
@@ -50,8 +50,7 @@
 
 (comment
   (set-auth-token! "sofiane" (gen-auth-token))
-  users
-  )
+  users)
 
 (comment
   (create-user! "sofiane" "password" "9179570254")
@@ -61,5 +60,4 @@
   @buddies
   (remove-buddies! "liam" "sofiane")
   (delete-user! "sofiane")
-  @users
-)
+  @users)
