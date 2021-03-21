@@ -26,11 +26,12 @@
 ;; returns new user map
 (defn create-user! [username cleartext-password phone]
   ;; Is there a quick way to do not contains? besides wrapping it in a not
+  ;; Should I return as [failure_reason user] with one being nil or like this? Ideally there should be a failure message.
   (if (contains? @users username) nil (let [user {:username username
                                                   :password-hash (hashpw cleartext-password)
                                                   :phone phone
                                                   :buddies []
-                                                  :auth-token nil
+                                                  :auth-token (gen-auth-token)
                                                   :status nil}]
                                         (swap! users assoc username user)
                                         user)))
@@ -44,6 +45,11 @@
 ;;(Question: is it bad if multiple clients to use the same auth token?)
 (defn set-auth-token! [username token]
   (swap! users assoc-in [username :auth-token] token))
+
+(defn get-auth-token [username password]
+  (let [user (get @users username)
+        auth (checkpw password (:password-hash user))]
+    (if auth user nil)))
 
 ;; TODO: Do nothing if buddies exist
 (defn create-buddies! [username-one username-two]
@@ -59,12 +65,13 @@
   ;; Is there a difference here between assoc and assoc-in 
   (swap! buddies assoc-in [#{from to}] (conj (get @buddies #{from to}) {:from from
                                                                         :to to
-                                                                        :time (java-time/local-date-time)
+                                                                        :time (.toString (java-time/local-date-time))
                                                                         :message message})))
 
 (comment
   (set-auth-token! "sofiane" (gen-auth-token))
-  users)
+  users
+  (.toString (java-time/local-date-time)))
 
 (comment
   (create-user! "sofiane" "password" "9179570254")
