@@ -105,7 +105,7 @@
     (swap! clients assoc (-> req :data :from) channel)
     (http-kit/on-receive channel #(on-receive-message % req))
     (http-kit/on-close channel (fn [_]
-                                 ;; I don't really like this, what if they're still connected through a different webhook (ie. status)
+                                 ;; I don't really like this, what if they're still connected through a different websocket (ie. status)
                                  (swap! clients dissoc (-> req :data :from))))))
 
 ;; Not sure how I should implement this (as HTTP vs WebSocket)
