@@ -84,6 +84,7 @@
         from (-> parsed-data :data :to)
         auth-token (-> req :headers :Authorization)
         user (users/authenticate-user from auth-token)]
+    ;; Should I send back the entire convo history or just the recent message? Will clients have to save records locally? What if a new client connects?
     (if user (let [sent-message (users/send-message! from to message)]
                (-> sent-message
                    json/generate-string
