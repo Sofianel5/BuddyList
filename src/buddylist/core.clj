@@ -6,6 +6,8 @@
             [org.httpkit.server :as http-kit]
             [ring.util.response :as response]))
 
+(def clients (atom {}))
+
 (defn render-index [req]
   (println (pr-str req))
   (-> (response/response "Hello World")
@@ -53,21 +55,64 @@
 
 (comment
   (render-log-in {:params {:username "sofiane" :password "password"}})
-  (render-log-in {:params {:username "sofiane" :password "wrongpassword"}})
-)
+  (render-log-in {:params {:username "sofiane" :password "wrongpassword"}}))
 
+(defn render-set-status [req]
+  (let [{:keys [username new-status]} (:params req)
+        auth-token (-> req :headers :Authorization)
+        user (users/authenticate-user username auth-token)]
+    (if user (-> (users/set-status! username new-status)
+                 json/generate-string
+                 response/response
+                 (response/content-type "application/json")
+                 (response/charset "utf-8")
+                 (response/status 201))
+        (-> {:status "failed"}
+            json/generate-string
+            response/response
+            (response/content-type "application/json")
+            (response/charset "utf-8")
+            (response/status 400)))))
 
-(defn ws-handler [req]
-  (let [channel "handler"]
-    (http-kit/with-channel req channel
-      (http-kit/on-close channel (fn [status] (println "channel closed: " status)))
-      (http-kit/on-receive channel (fn [data] ;; echo it back
-                                     (http-kit/send! channel data))))))
+(comment
+  (render-set-status {:params {:username "sofiane" :new-status "Still coding BuddyList"} :headers {:Authorization "9509c9ac-5bed-4597-8a56-54d262fa8457"}}))
+
+(defn on-receive-message [data req]
+  (let [parsed-data (json/parse-string data)
+        message (-> parsed-data :data :message)
+        to (-> parsed-data :data :to)
+        from (-> parsed-data :data :to)
+        auth-token (-> req :headers :Authorization)
+        user (users/authenticate-user from auth-token)]
+    (if user (let [sent-message (users/send-message! from to message)]
+               (-> sent-message
+                   json/generate-string
+                   response/response
+                   (response/content-type "application/json")
+                   (response/charset "utf-8")
+                   (response/status 201))
+               (http-kit/send! (get @clients to) sent-message))
+        (-> {:status "failed"}
+            json/generate-string
+            response/response
+            (response/content-type "application/json")
+            (response/charset "utf-8")
+            (response/status 400)))))
+
+(defn on-close-chat-connection [status]
+  (print status))
+
+(defn chat-handler [req]
+  (http-kit/with-channel req channel
+    (swap! clients assoc (-> req :data :from) channel)
+    (http-kit/on-receive channel #(on-receive-message % req))
+    (http-kit/on-close channel on-close-chat-connection)))
 
 (defroutes all-routes
   (GET "/" [] render-index)
   (POST "/signup" [] render-sign-up)
-  (GET "/ws" [] ws-handler)
+  (GET "/chat" [] chat-handler)
+  (POST "/set-status" [] render-set-status)
   (route/not-found "<p>Page not found.</p>")) ;; all other, return 404
 
 (defn -main [& args]

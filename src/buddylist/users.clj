@@ -59,14 +59,23 @@
   (swap! buddies dissoc #{username-one username-two}))
 
 (defn set-status! [username status]
-  (swap! users assoc-in [username :status] status))
+  (get (swap! users assoc-in [username :status] status) username))
 
 (defn send-message! [from to message]
   ;; Is there a difference here between assoc and assoc-in 
-  (swap! buddies assoc-in [#{from to}] (conj (get @buddies #{from to}) {:from from
-                                                                        :to to
-                                                                        :time (.toString (java-time/local-date-time))
-                                                                        :message message})))
+  (-> (swap! buddies assoc-in [#{from to}] (conj (get @buddies #{from to}) {:from from
+                                                                            :to to
+                                                                            :time (.toString (java-time/local-date-time))
+                                                                            :message message}))
+      (get #{from to})
+      last))
+
+(defn get-buddies [username]
+  (let [user (get @users username)]))
+
+(defn authenticate-user [username auth-token]
+  (let [assoc-user (get @users username)]
+    (if (= auth-token (:auth-token assoc-user)) assoc-user nil)))
 
 (comment
   (set-auth-token! "sofiane" (gen-auth-token))
@@ -76,7 +85,8 @@
 (comment
   (create-user! "sofiane" "password" "9179570254")
   (create-user! "liam" "password" "9179570254")
-  (-> @users (get "sofiane") :username)
+  (-> @users (get "sofiane") :auth-token)
+  (if (authenticate-user "sofiane" "9509c9ac-5bed-4597-8a56-54d262fa8457") true false)
   (create-buddies! "liam" "sofiane")
   @buddies
   (remove-buddies! "liam" "sofiane")
