@@ -4,7 +4,8 @@
             [compojure.core :refer :all]
             [compojure.route :as route]
             [org.httpkit.server :as http-kit]
-            [ring.util.response :as response]))
+            [ring.util.response :as response]
+            [ring.middleware.json :only [wrap-json-body]]))
 
 (def clients (atom {}))
 
@@ -14,7 +15,8 @@
       (response/content-type "text/plain")))
 
 (defn render-sign-up [req]
-  (let [{:keys [username cleartext-password phone]} (:params req)
+  (println (pr-str req))
+  (let [{:keys [username cleartext-password phone]} (-> req :body str json/decode)
         user (users/create-user! username cleartext-password phone)]
     (if user (-> user
                  json/generate-string
@@ -112,6 +114,7 @@
 ;; Not sure how I should implement this (as HTTP vs WebSocket)
 (defn render-get-buddies-status [req] (print req))
 (defroutes all-routes
+  ;; How do I write a macro that wraps each function (the last element of each list below) in a call to wrap-json-body
   (GET "/" [] render-index)
   (POST "/signup" [] render-sign-up)
   (GET "/chat" [] chat-handler)

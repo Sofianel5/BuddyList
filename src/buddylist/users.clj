@@ -24,6 +24,7 @@
   (.toString (java.util.UUID/randomUUID)))
 
 ;; returns new user map
+;; TODO: Validate username, password, phone
 (defn create-user! [username cleartext-password phone]
   ;; Is there a quick way to do not contains? besides wrapping it in a not
   ;; Should I return as [failure_reason user] with one being nil or like this? Ideally there should be a failure message.
@@ -91,6 +92,7 @@
   @buddies
   (remove-buddies! "liam" "sofiane")
   (delete-user! "sofiane")
+  (delete-user! nil)
   (set-status! "sofiane" "Coding BuddyList")
   (send-message! "sofiane" "liam" "Did u finish beatstreet?")
   (send-message! "liam" "sofiane" "Yes! Do you want to see?")
