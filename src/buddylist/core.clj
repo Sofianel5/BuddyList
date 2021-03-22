@@ -105,8 +105,11 @@
     (swap! clients assoc (-> req :data :from) channel)
     (http-kit/on-receive channel #(on-receive-message % req))
     (http-kit/on-close channel (fn [_]
+                                 ;; I don't really like this, what if they're still connected through a different webhook (ie. status)
                                  (swap! clients dissoc (-> req :data :from))))))
 
+;; Not sure how I should implement this (as HTTP vs WebSocket)
+(defn render-get-buddies-status [req] (print req))
 (defroutes all-routes
   (GET "/" [] render-index)
   (POST "/signup" [] render-sign-up)
