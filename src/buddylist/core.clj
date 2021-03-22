@@ -119,6 +119,7 @@
   (route/not-found "<p>Page not found.</p>")) ;; all other, return 404
 
 (defn -main [& args]
-  (let [p 8000]
+  (let [p 8000];; What is the point of #' - Clojure docs say that its a "var quote" but I don't know why we need to call var on a function that's already defined
+    
     (http-kit/run-server #'all-routes {:ip "0.0.0.0", :port p})
     (println "Server running on port" p)))
