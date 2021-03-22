@@ -99,6 +99,7 @@
             (response/content-type "application/json")
             (response/charset "utf-8")
             (response/status 400)))))
+;; I want to write a macro for these functions since they're all of form gather data->check if authenticated->authentication branch
 
 (defn chat-handler [req]
   (http-kit/with-channel req channel
