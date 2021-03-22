@@ -100,14 +100,12 @@
             (response/charset "utf-8")
             (response/status 400)))))
 
-(defn on-close-chat-connection [status]
-  (print status))
-
 (defn chat-handler [req]
   (http-kit/with-channel req channel
     (swap! clients assoc (-> req :data :from) channel)
     (http-kit/on-receive channel #(on-receive-message % req))
-    (http-kit/on-close channel on-close-chat-connection)))
+    (http-kit/on-close channel (fn [_]
+                                 (swap! clients dissoc (-> req :data :from))))))
 
 (defroutes all-routes
   (GET "/" [] render-index)
