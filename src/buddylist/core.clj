@@ -113,6 +113,13 @@
 
 ;; Not sure how I should implement this (as HTTP vs WebSocket)
 (defn render-get-buddies-status [req] (print req))
+
+(defn changelast [l f]
+  (concat (drop-last l) (-> l last f list)))
+
+(defmacro wrapmiddleware [middleware endpoints]
+  (reverse (into () (map #(changelast % (apply comp middleware)) endpoints))))
+
 (defroutes all-routes
   ;; How do I write a macro that wraps each function (the last element of each list below) in a call to wrap-json-body
   (GET "/" [] render-index)
