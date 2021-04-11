@@ -4,40 +4,47 @@
             [compojure.core :refer :all]
             [compojure.route :as route]
             [org.httpkit.server :as http-kit]
-            [ring.util.response :as response]
-            [ring.middleware.json :only [wrap-json-body]]))
+            [ring.util.response :as response]))
 
-(def clients (atom {}))
+(def 📲 (atom {}))
+
+;; Helper utils -------------------------
+
+(defn plaintext-response [body]
+  (-> (response/response body)
+      (response/content-type "text/plain")
+      (response/charset "utf-8")))
+
+(defn json-response [body & [status]]
+  (-> body
+      json/generate-string
+      response/response
+      (response/content-type "application/json")
+      (response/charset "utf-8")
+      (response/status (or status 200))))
+
+;;---------------------------------------
 
 (defn render-index [req]
   (println (pr-str req))
-  (-> (response/response "Hello World")
-      (response/content-type "text/plain")))
+  (plaintext-response "Hello World"))
 
 (defn render-sign-up [req]
   (println (pr-str req))
-  (let [{:keys [username cleartext-password phone]} (-> req :body str json/decode)
+  (let [{:keys [username cleartext-password phone]} (-> req :params)
         user (users/create-user! username cleartext-password phone)]
-    (if user (-> user
-                 json/generate-string
-                 response/response
-                 (response/content-type "application/json")
-                 (response/charset "utf-8")
-                 (response/status 201))
-        (-> {:status "failed"}
-            json/generate-string
-            response/response
-            (response/content-type "application/json")
-            (response/charset "utf-8")
-            (response/status 400)))))
+    (print user)
+    (if user
+      (json-response user 201)
+      (json-response {:status "failed"} 400))))
 
 (comment
   (render-sign-up {:params {:username "test"
                             :cleartext-password "password"
-                            :phone "555-555-5555"}})
-  (render-sign-up {:params {:username "test2"
+  :phone "555-555-5555"}})
+  (render-sign-up {:params {:username "bruhhhhh"
                             :cleartext-password "password"
-                            :phone "555-555-5555"}}))
+                            :phone "555-565-5555"}}))
 
 (defn render-log-in [req]
   (let [{:keys [username password]} (:params req)
@@ -94,7 +101,7 @@
                    (response/content-type "application/json")
                    (response/charset "utf-8")
                    (response/status 201))
-               (http-kit/send! (get @clients to) sent-message))
+               (http-kit/send! (get @📲 to) sent-message))
         (-> {:status "failed"}
             json/generate-string
             response/response
@@ -105,11 +112,11 @@
 
 (defn chat-handler [req]
   (http-kit/with-channel req channel
-    (swap! clients assoc (-> req :data :from) channel)
+    (swap! 📲 assoc (-> req :data :from) channel)
     (http-kit/on-receive channel #(on-receive-message % req))
     (http-kit/on-close channel (fn [_]
                                  ;; I don't really like this, what if they're still connected through a different websocket (ie. status)
-                                 (swap! clients dissoc (-> req :data :from))))))
+                                 (swap! 📲 dissoc (-> req :data :from))))))
 
 ;; Not sure how I should implement this (as HTTP vs WebSocket)
 (defn render-get-buddies-status [req] (print req))
@@ -130,6 +137,5 @@
 
 (defn -main [& args]
   (let [p 8000];; What is the point of #' - Clojure docs say that its a "var quote" but I don't know why we need to call var on a function that's already defined
-    
     (http-kit/run-server #'all-routes {:ip "0.0.0.0", :port p})
     (println "Server running on port" p)))
