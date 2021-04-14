@@ -39,7 +39,7 @@
 
 (defn delete-user! [username]
   (swap! buddies (fn [x] (into {} (filter #(contains? % username) x))))
-  (swap! users dissoc username))
+                     (swap! users dissoc username))
 
 ;; TODO: might be nice to support a set of auth tokens so user can be logged in from
 ;; multiple clients. 
@@ -69,10 +69,18 @@
                                                                             :time (.toString (java-time/local-date-time))
                                                                             :message message}))
       (get #{from to})
-      last))
+      first))
 
 (defn get-buddies [username]
-  (let [user (get @users username)]))
+  (->> @buddies keys (filter #(contains? % username)) (map (fn [pair] (first (filter #(not= % username) pair))))))
+
+(comment
+  (def username "sofiane")
+  (keys @buddies)
+  (def fakebuddies '(#{"liam" "sofiane"} #{"sofiane" "fake1"} #{"sofiane" "fake2"}))
+  (->> fakebuddies (filter #(contains? % username)) (map (fn [pair] (first (filter #(not= % username) pair)))))
+  (filter #(contains? % username) (keys @buddies))
+  (get-buddies "sofiane"))
 
 (defn authenticate-user [username auth-token]
   (let [assoc-user (get @users username)]

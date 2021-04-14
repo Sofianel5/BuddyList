@@ -23,6 +23,29 @@
       (response/charset "utf-8")
       (response/status (or status 200))))
 
+(defn clean-user [user-obj]
+  (dissoc user-obj :password-hash))
+
+(defn get-auth-token [req]
+  (-> req :headers (get "authorization")))
+
+(defn save-client [req channel]
+  (let [auth-token (get-auth-token req)
+        username (-> req :data :from)
+        user (users/authenticate-user username auth-token)]
+    (if user
+      (if (contains? @📲 user)
+        (swap! 📲 assoc username (conj (get @📲 username) channel))
+        (swap! 📲 assoc username (list channel))))))
+
+(defn remove-client [req channel]
+  (let [auth-token (get-auth-token req)
+        username (-> req :data :from)
+        user (users/authenticate-user username auth-token)]
+    (if user
+      (if (contains? @📲 user)
+        (swap! 📲 assoc username (remove #(= channel %) (get @📲 username)))))))
+
 ;;---------------------------------------
 
 (defn render-index [req]
@@ -35,103 +58,96 @@
         user (users/create-user! username cleartext-password phone)]
     (print user)
     (if user
-      (json-response user 201)
+      (json-response (clean-user user) 201)
       (json-response {:status "failed"} 400))))
 
 (comment
   (render-sign-up {:params {:username "test"
                             :cleartext-password "password"
-  :phone "555-555-5555"}})
-  (render-sign-up {:params {:username "bruhhhhh"
+                            :phone "555-555-5555"}})
+  (render-sign-up {:params {:username "bruhhhh"
                             :cleartext-password "password"
                             :phone "555-565-5555"}}))
 
 (defn render-log-in [req]
   (let [{:keys [username password]} (:params req)
         user (users/get-auth-token username password)]
-    (if user (-> user
-                 json/generate-string
-                 response/response
-                 (response/content-type "application/json")
-                 (response/charset "utf-8")
-                 (response/status 200))
-        (-> {:status "failed"}
-            json/generate-string
-            response/response
-            (response/content-type "application/json")
-            (response/charset "utf-8")
-            (response/status 400)))))
+    (if user
+      (json-response (clean-user user) 200)
+      (json-response {:status "failed"} 400))))
 
 (comment
-  (render-log-in {:params {:username "sofiane" :password "password"}})
+  (render-log-in {:params {:username "bruhhhh" :password "password"}})
   (render-log-in {:params {:username "sofiane" :password "wrongpassword"}}))
 
 (defn render-set-status [req]
   (let [{:keys [username new-status]} (:params req)
-        auth-token (-> req :headers :Authorization)
+        auth-token (get-auth-token req)
         user (users/authenticate-user username auth-token)]
-    (if user (-> (users/set-status! username new-status)
-                 json/generate-string
-                 response/response
-                 (response/content-type "application/json")
-                 (response/charset "utf-8")
-                 (response/status 201))
-        (-> {:status "failed"}
-            json/generate-string
-            response/response
-            (response/content-type "application/json")
-            (response/charset "utf-8")
-            (response/status 400)))))
+    (if user
+      (json-response (clean-user (users/set-status! username new-status)) 201)
+      (json-response {:status "failed"} 400))))
 
 (comment
-  (render-set-status {:params {:username "sofiane" :new-status "Still coding BuddyList"} :headers {:Authorization "9509c9ac-5bed-4597-8a56-54d262fa8457"}}))
+  (render-set-status {:params {:username "sofiane" :new-status "Still coding BuddyList"} :headers {:Authorization "2b6f0364-a2f8-443f-a358-9e80d6d8c159"}}))
 
 (defn on-receive-message [data req]
-  (let [parsed-data (json/parse-string data)
-        message (-> parsed-data :data :message)
-        to (-> parsed-data :data :to)
-        from (-> parsed-data :data :to)
-        auth-token (-> req :headers :Authorization)
-        user (users/authenticate-user from auth-token)]
+  (println "on-receive-message\n")
+  (println "Data: " data "\n\n")
+  (println "Req: " req)
+  (let [data (json/parse-string data true)
+        _ (println data "\n\n")
+        message (:message data)
+        to (:to data)
+        from (:from data)
+        _ (println message to from "\n\n")
+        auth-token (get-auth-token req)
+        _ (println auth-token "\n\n")
+        user (users/authenticate-user from auth-token)
+        _ (println user "\n\n")]
     ;; Should I send back the entire convo history or just the recent message? Will clients have to save records locally? What if a new client connects?
-    (if user (let [sent-message (users/send-message! from to message)]
-               (-> sent-message
-                   json/generate-string
-                   response/response
-                   (response/content-type "application/json")
-                   (response/charset "utf-8")
-                   (response/status 201))
-               (http-kit/send! (get @📲 to) sent-message))
-        (-> {:status "failed"}
-            json/generate-string
-            response/response
-            (response/content-type "application/json")
-            (response/charset "utf-8")
-            (response/status 400)))))
+    (if user
+      (let [sent-message (users/send-message! from to message)]
+        (println "succeeded")
+        (if-let [client (get @📲 to)] (http-kit/send! client sent-message)))
+      (println "failed"))))
 ;; I want to write a macro for these functions since they're all of form gather data->check if authenticated->authentication branch
 
+(comment
+  (on-receive-message "{\"to\": \"liam\", \"from\": \"sofiane\", \"message\": \"hello there\"}" {:headers {"authorization" "2b6f0364-a2f8-443f-a358-9e80d6d8c159"}}))
 (defn chat-handler [req]
   (http-kit/with-channel req channel
-    (swap! 📲 assoc (-> req :data :from) channel)
+    ;; Turn into map<name->list<channel>> to support multiple clients
+    (print req)
+    (save-client req channel) ; security issue here do not want to notify unauthorized clients
     (http-kit/on-receive channel #(on-receive-message % req))
     (http-kit/on-close channel (fn [_]
-                                 ;; I don't really like this, what if they're still connected through a different websocket (ie. status)
-                                 (swap! 📲 dissoc (-> req :data :from))))))
+                                 ;; Does this disconnect other websockets from the same IP (ie. status)
+                                 (remove-client req channel)))))
 
-;; Not sure how I should implement this (as HTTP vs WebSocket)
-(defn render-get-buddies-status [req] (print req))
+(defn send-buddies! [req channel]
+  (let [auth-token (get-auth-token req)
+        username (-> req :data :from)
+        user (users/authenticate-user username auth-token)]
+    (if user (http-kit/send! (json/generate-string (users/get-buddies username)) channel))))
 
-(defn changelast [l f]
-  (concat (drop-last l) (-> l last f list)))
+(defn on-receive-status-update [data req] (print data))
 
-(defmacro wrapmiddleware [middleware endpoints]
-  (reverse (into () (map #(changelast % (apply comp middleware)) endpoints))))
+(defn buddylist-handler [req] 
+  (http-kit/with-channel req channel
+                         (println req "\n\n")
+                         (println channel "\n\n")
+                         (save-client req channel)
+                         (send-buddies! req channel)
+                         (http-kit/on-receive channel on-receive-status-update)
+                         (http-kit/on-close channel (fn [_] remove-client req channel))))
 
 (defroutes all-routes
   ;; How do I write a macro that wraps each function (the last element of each list below) in a call to wrap-json-body
   (GET "/" [] render-index)
   (POST "/signup" [] render-sign-up)
   (GET "/chat" [] chat-handler)
+  (GET "/buddies" [] buddylist-handler)
   (POST "/set-status" [] render-set-status)
   (route/not-found "<p>Page not found.</p>")) ;; all other, return 404
 
