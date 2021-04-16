@@ -74,6 +74,9 @@
 (defn get-buddies [username]
   (->> @buddies keys (filter #(contains? % username)) (map (fn [pair] (first (filter #(not= % username) pair))))))
 
+(defn get-convo [username buddy start offset]
+  (-> @buddies (get #{username buddy}) (subvec start (+ start offset))))
+
 (comment
   (def username "sofiane")
   (keys @buddies)

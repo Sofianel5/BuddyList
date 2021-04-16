@@ -29,6 +29,9 @@
 (defn get-auth-token [req]
   (-> req :headers (get "authorization")))
 
+(defn get-request-user [req]
+  (-> req :headers (get "request-user")))
+
 (defn save-client [req channel]
   (let [auth-token (get-auth-token req)
         username (-> req :data :from)
@@ -125,13 +128,42 @@
                                  ;; Does this disconnect other websockets from the same IP (ie. status)
                                  (remove-client req channel)))))
 
+(defn get-chat-history [req]
+  (let [auth-token (get-auth-token req)
+        username (get-request-user req)
+        user (users/authenticate-user username auth-token)]
+    (if user 
+      (let [req-data (-> req :data (json/generate-string true))
+            buddy (:buddy req-data)
+            {:keys [start offset] :or {start 0 offset 25}} req-data
+            convo-history (users/get-convo username buddy start offset)]
+        (json-response convo-history))
+      (json-response {:status "failed"} 400))))
+
 (defn send-buddies! [req channel]
   (let [auth-token (get-auth-token req)
         username (-> req :data :from)
         user (users/authenticate-user username auth-token)]
     (if user (http-kit/send! (json/generate-string (users/get-buddies username)) channel))))
 
-(defn on-receive-status-update [data req] (print data))
+(defn notify-user [user message]
+  (if-let [channel (-> @📲 user)]
+    (http-kit/send! message channel)))
+
+(defn notify-status-change [username new-status]
+  (let [buddies (users/get-buddies username)]
+    (http-kit/send! new-status (-> @📲 username))
+    (->> buddies
+         (map #(future (notify-user % new-status)))
+         doall
+         (keep deref))))
+
+(defn on-receive-status-update [data req] 
+  (let [auth-token (get-auth-token req)
+        username (get-request-user req)
+        user (users/authenticate-user username auth-token)
+        new-status (-> data (json/generate-string true) :new-status)]
+    (if user (notify-status-change username new-status))))
 
 (defn buddylist-handler [req] 
   (http-kit/with-channel req channel
@@ -147,6 +179,7 @@
   (GET "/" [] render-index)
   (POST "/signup" [] render-sign-up)
   (GET "/chat" [] chat-handler)
+  (GET "/chat-history" [] get-chat-history)
   (GET "/buddies" [] buddylist-handler)
   (POST "/set-status" [] render-set-status)
   (route/not-found "<p>Page not found.</p>")) ;; all other, return 404
