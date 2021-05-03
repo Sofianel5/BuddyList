@@ -53,6 +53,7 @@
     (if auth user nil)))
 
 ;; TODO: Do nothing if buddies exist
+; Should it be a list of vector?
 (defn create-buddies! [username-one username-two]
   (if (contains? @buddies #{username-one username-two}) nil (swap! buddies assoc #{username-one username-two} [])))
 
@@ -67,15 +68,29 @@
   (-> (swap! buddies assoc-in [#{from to}] (conj (get @buddies #{from to}) {:from from
                                                                             :to to
                                                                             :time (.toString (java-time/local-date-time))
+                                                                            :id (-> @buddies
+                                                                                    (get #{from to})
+                                                                                    count
+                                                                                    inc)
                                                                             :message message}))
       (get #{from to})
-      first))
+      last))
+
+(defn get-buddy-map [buddy-name]
+  (-> @users (get buddy-name) (dissoc :password-hash :auth-token :phone :buddies)))
 
 (defn get-buddies [username]
-  (->> @buddies keys (filter #(contains? % username)) (map (fn [pair] (first (filter #(not= % username) pair))))))
+  (->> @buddies keys (filter #(contains? % username)) (map (fn [pair] (first (filter #(not= % username) pair)))) (map get-buddy-map)))
 
 (defn get-convo [username buddy start offset]
-  (-> @buddies (get #{username buddy}) (subvec start (+ start offset))))
+  (let [full-convo (-> @buddies (get #{username buddy}))]
+    (if (> (+ start offset) (- (count full-convo) 1))
+      (subvec full-convo start)
+      (subvec full-convo start (+ start offset)))))
+
+(defn get-recent-messages [username buddy n]
+  (let [full-convo (-> @buddies (get #{username buddy}))]
+    (subvec full-convo (- (count full-convo) n))))
 
 (comment
   (def username "sofiane")
@@ -83,6 +98,9 @@
   (def fakebuddies '(#{"liam" "sofiane"} #{"sofiane" "fake1"} #{"sofiane" "fake2"}))
   (->> fakebuddies (filter #(contains? % username)) (map (fn [pair] (first (filter #(not= % username) pair)))))
   (filter #(contains? % username) (keys @buddies))
+  (get-buddy-map username)
+  (set-status! "liam" "something new")
+  (count (get-convo "sofiane" "liam" 1 26))
   (get-buddies "sofiane"))
 
 (defn authenticate-user [username auth-token]
@@ -100,7 +118,7 @@
   (-> @users (get "sofiane") :auth-token)
   (if (authenticate-user "sofiane" "9509c9ac-5bed-4597-8a56-54d262fa8457") true false)
   (create-buddies! "liam" "sofiane")
-  @buddies
+  (count (get @buddies #{"sofiane" "liam"}))
   (remove-buddies! "liam" "sofiane")
   (delete-user! "sofiane")
   (delete-user! nil)

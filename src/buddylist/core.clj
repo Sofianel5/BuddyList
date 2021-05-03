@@ -4,8 +4,13 @@
             [compojure.core :refer :all]
             [compojure.route :as route]
             [org.httpkit.server :as http-kit]
-            [ring.util.response :as response]))
+            [ring.util.response :as response]
+            [ring.middleware.keyword-params :refer [wrap-keyword-params]]
+            [ring.middleware.params :refer [wrap-params]]
+            ;[ring.middleware.anti-forgery :refer [wrap-anti-forgery]]
+            [ring.middleware.session :refer [wrap-session]]))
 
+; Should I persist this?
 (def 📲 (atom {}))
 
 ;; Helper utils -------------------------
@@ -34,7 +39,7 @@
 
 (defn save-client [req channel]
   (let [auth-token (get-auth-token req)
-        username (-> req :data :from)
+        username (get-request-user req)
         user (users/authenticate-user username auth-token)]
     (if user
       (if (contains? @📲 user)
@@ -48,6 +53,13 @@
     (if user
       (if (contains? @📲 user)
         (swap! 📲 assoc username (remove #(= channel %) (get @📲 username)))))))
+
+(defn notify-user [user message]
+  (println "notifying" user)
+  (if-let [channels (get @📲 user)]
+    (->> channels (map #(http-kit/send! % message)) doall)
+    (println "cannot assoc"))
+  (println "done"))
 
 ;;---------------------------------------
 
@@ -73,7 +85,8 @@
                             :phone "555-565-5555"}}))
 
 (defn render-log-in [req]
-  (let [{:keys [username password]} (:params req)
+  (let [_ (println req)
+        {:keys [username password]} (:params req)
         user (users/get-auth-token username password)]
     (if user
       (json-response (clean-user user) 200)
@@ -82,6 +95,14 @@
 (comment
   (render-log-in {:params {:username "bruhhhh" :password "password"}})
   (render-log-in {:params {:username "sofiane" :password "wrongpassword"}}))
+
+(defn render-update-user [req]
+  (let [auth-token (get-auth-token req)
+        request-user (get-request-user req)
+        auth-result (users/authenticate-user request-user auth-token)]
+    (if auth-result
+      (json-response (clean-user auth-result) 200)
+      (json-response {:status "failed"} 400))))
 
 (defn render-set-status [req]
   (let [{:keys [username new-status]} (:params req)
@@ -101,8 +122,8 @@
   (let [data (json/parse-string data true)
         _ (println data "\n\n")
         message (:message data)
-        to (:to data)
-        from (:from data)
+        to (-> req :params :with-user)
+        from (get-request-user req)
         _ (println message to from "\n\n")
         auth-token (get-auth-token req)
         _ (println auth-token "\n\n")
@@ -110,19 +131,32 @@
         _ (println user "\n\n")]
     ;; Should I send back the entire convo history or just the recent message? Will clients have to save records locally? What if a new client connects?
     (if user
-      (let [sent-message (users/send-message! from to message)]
+      (let [sent-message (users/send-message! from to message)
+            encoded-message (json/generate-string sent-message)]
         (println "succeeded")
-        (if-let [client (get @📲 to)] (http-kit/send! client sent-message)))
+        (if-let [clients (get @📲 to)] (doall (map #(http-kit/send! % encoded-message) clients)))
+        (if-let [clients (get @📲 from)] (doall (map #(http-kit/send! % encoded-message) clients))))
       (println "failed"))))
 ;; I want to write a macro for these functions since they're all of form gather data->check if authenticated->authentication branch
 
 (comment
   (on-receive-message "{\"to\": \"liam\", \"from\": \"sofiane\", \"message\": \"hello there\"}" {:headers {"authorization" "2b6f0364-a2f8-443f-a358-9e80d6d8c159"}}))
+
+(defn send-recent-messages! [req channel]
+  (let [auth-token (get-auth-token req)
+        username (get-request-user req)
+        with-user (-> req :params :with-user)
+        user (users/authenticate-user username auth-token)]
+    (if user (let [convo-history (users/get-recent-messages username with-user 25)
+                   encoded (json/generate-string convo-history)]
+               (http-kit/send! channel encoded)))))
+
 (defn chat-handler [req]
   (http-kit/with-channel req channel
-    ;; Turn into map<name->list<channel>> to support multiple clients
+    ;; Turned into map<name->list<channel>> to support multiple clients
     (print req)
     (save-client req channel) ; security issue here do not want to notify unauthorized clients
+    (send-recent-messages! req channel)
     (http-kit/on-receive channel #(on-receive-message % req))
     (http-kit/on-close channel (fn [_]
                                  ;; Does this disconnect other websockets from the same IP (ie. status)
@@ -142,28 +176,27 @@
 
 (defn send-buddies! [req channel]
   (let [auth-token (get-auth-token req)
-        username (-> req :data :from)
+        username (get-request-user req)
         user (users/authenticate-user username auth-token)]
-    (if user (http-kit/send! (json/generate-string (users/get-buddies username)) channel))))
-
-(defn notify-user [user message]
-  (if-let [channel (-> @📲 user)]
-    (http-kit/send! message channel)))
+    (if user (http-kit/send! channel (json/generate-string (users/get-buddies username))))))
 
 (defn notify-status-change [username new-status]
   (let [buddies (users/get-buddies username)]
-    (http-kit/send! new-status (-> @📲 username))
+    (notify-user username (json/generate-string {:new-status new-status}))
     (->> buddies
-         (map #(future (notify-user % new-status)))
+         (map #(future (notify-user (:username %) (json/generate-string (users/get-buddies (:username %))))))
          doall
          (keep deref))))
 
-(defn on-receive-status-update [data req] 
+(defn on-receive-status-update [req data] 
+  (println "received update" data)
+  (println "clients " @📲)
   (let [auth-token (get-auth-token req)
         username (get-request-user req)
         user (users/authenticate-user username auth-token)
-        new-status (-> data (json/generate-string true) :new-status)]
-    (if user (notify-status-change username new-status))))
+        new-status (-> data (json/parse-string true) :new-status)]
+    (if user (let [user (users/set-status! (:username user) new-status)]
+      (notify-status-change username new-status)))))
 
 (defn buddylist-handler [req] 
   (http-kit/with-channel req channel
@@ -171,20 +204,27 @@
                          (println channel "\n\n")
                          (save-client req channel)
                          (send-buddies! req channel)
-                         (http-kit/on-receive channel on-receive-status-update)
+                         (http-kit/on-receive channel #(on-receive-status-update req %))
                          (http-kit/on-close channel (fn [_] remove-client req channel))))
 
 (defroutes all-routes
   ;; How do I write a macro that wraps each function (the last element of each list below) in a call to wrap-json-body
   (GET "/" [] render-index)
   (POST "/signup" [] render-sign-up)
+  (POST "/login" [] render-log-in)
+  (POST "/user" [] render-update-user)
   (GET "/chat" [] chat-handler)
   (GET "/chat-history" [] get-chat-history)
   (GET "/buddies" [] buddylist-handler)
   (POST "/set-status" [] render-set-status)
   (route/not-found "<p>Page not found.</p>")) ;; all other, return 404
 
+(def app (-> all-routes 
+             ring.middleware.keyword-params/wrap-keyword-params
+             ring.middleware.params/wrap-params
+             ;ring.middleware.anti-forgery/wrap-anti-forgery
+             ring.middleware.session/wrap-session))
 (defn -main [& args]
   (let [p 8000];; What is the point of #' - Clojure docs say that its a "var quote" but I don't know why we need to call var on a function that's already defined
-    (http-kit/run-server #'all-routes {:ip "0.0.0.0", :port p})
+    (http-kit/run-server #'app {:ip "0.0.0.0", :port p})
     (println "Server running on port" p)))
