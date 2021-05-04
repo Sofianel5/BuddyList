@@ -207,6 +207,16 @@
                          (http-kit/on-receive channel #(on-receive-status-update req %))
                          (http-kit/on-close channel (fn [_] remove-client req channel))))
 
+(defn render-create-buddies [req]
+  (let [auth-token (get-auth-token req)
+        username (get-request-user req)
+        new-buddy (-> req :params :new-buddy)
+        user (users/authenticate-user username auth-token)]
+    (if user
+      (if-let [_ (users/create-buddies! username new-buddy)]
+        (json-response {:status "succeeded"} 200)
+        (json-response {:status "failed"} 400)))))
+
 (defroutes all-routes
   ;; How do I write a macro that wraps each function (the last element of each list below) in a call to wrap-json-body
   (GET "/" [] render-index)
@@ -215,6 +225,7 @@
   (POST "/user" [] render-update-user)
   (GET "/chat" [] chat-handler)
   (GET "/chat-history" [] get-chat-history)
+  (POST "/add-buddy" [] render-create-buddies)
   (GET "/buddies" [] buddylist-handler)
   (POST "/set-status" [] render-set-status)
   (route/not-found "<p>Page not found.</p>")) ;; all other, return 404
