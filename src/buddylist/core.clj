@@ -180,9 +180,9 @@
 
 (defn notify-status-change [username new-status]
   (let [buddies (users/get-buddies username)]
-    (notify-user username (json/generate-string {:new-status new-status}))
+    (notify-user username "buddylist" (json/generate-string {:new-status new-status}))
     (->> buddies
-         (map #(future (notify-user (:username %) (json/generate-string (users/get-buddies (:username %))))))
+         (map #(future (notify-user (:username %) "buddylist" (json/generate-string (users/get-buddies (:username %))))))
          doall
          (keep deref))))
 
