@@ -39,18 +39,22 @@
 
 (defn delete-user! [username]
   (swap! buddies (fn [x] (into {} (filter #(contains? % username) x))))
-                     (swap! users dissoc username))
+  (swap! users dissoc username))
 
 ;; TODO: might be nice to support a set of auth tokens so user can be logged in from
 ;; multiple clients. 
 ;;(Question: is it bad if multiple clients to use the same auth token?)
 (defn set-auth-token! [username token]
-  (swap! users assoc-in [username :auth-token] token))
+  (get (swap! users assoc-in [username :auth-token] token) username))
 
 (defn get-auth-token [username password]
   (let [user (get @users username)
         auth (checkpw password (:password-hash user))]
-    (if auth user nil)))
+    (if auth 
+      (if-not (:auth-token user)
+               (set-auth-token! (:username user) (gen-auth-token))
+               user)
+      nil)))
 
 ;; TODO: Do nothing if buddies exist
 ; Should it be a list of vector?
@@ -90,10 +94,14 @@
 
 (defn get-recent-messages [username buddy n]
   (let [full-convo (-> @buddies (get #{username buddy}))]
-    (subvec full-convo (- (count full-convo) n))))
+    (if (> n (- (count full-convo) 1))
+      full-convo
+      (subvec full-convo (- (count full-convo) n)))))
 
 (comment
   (def username "sofiane")
+  (-> @buddies (get #{"sofiane" "newuser"}))
+  (get-recent-messages "sofiane" "newuser" 25)
   (keys @buddies)
   (def fakebuddies '(#{"liam" "sofiane"} #{"sofiane" "fake1"} #{"sofiane" "fake2"}))
   (->> fakebuddies (filter #(contains? % username)) (map (fn [pair] (first (filter #(not= % username) pair)))))
@@ -114,6 +122,11 @@
 
 (comment
   (create-user! "sofiane" "password" "9179570254")
+  (def user (authenticate-user "sofiane" "password"))
+  @users
+  user
+  (set-auth-token! (:username user) (gen-auth-token))
+  user
   (create-user! "liam" "password" "9179570254")
   (-> @users (get "sofiane") :auth-token)
   (if (authenticate-user "sofiane" "9509c9ac-5bed-4597-8a56-54d262fa8457") true false)

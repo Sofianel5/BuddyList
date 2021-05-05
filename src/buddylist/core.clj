@@ -37,27 +37,25 @@
 (defn get-request-user [req]
   (-> req :headers (get "request-user")))
 
-(defn save-client [req channel]
+(defn save-client [req channel-name channel]
   (let [auth-token (get-auth-token req)
         username (get-request-user req)
         user (users/authenticate-user username auth-token)]
     (if user
-      (if (contains? @📲 user)
-        (swap! 📲 assoc username (conj (get @📲 username) channel))
-        (swap! 📲 assoc username (list channel))))))
+      (swap! 📲 assoc-in [username channel-name] channel))))
 
-(defn remove-client [req channel]
+(defn remove-client [req channel-name]
   (let [auth-token (get-auth-token req)
         username (-> req :data :from)
         user (users/authenticate-user username auth-token)]
     (if user
       (if (contains? @📲 user)
-        (swap! 📲 assoc username (remove #(= channel %) (get @📲 username)))))))
+        (swap! 📲 assoc username (dissoc (get 📲 username) channel-name))))))
 
-(defn notify-user [user message]
+(defn notify-user [user channel-name message]
   (println "notifying" user)
-  (if-let [channels (get @📲 user)]
-    (->> channels (map #(http-kit/send! % message)) doall)
+  (if-let [channel (-> @📲 (get user) (get channel-name))]
+    (http-kit/send! channel message)
     (println "cannot assoc"))
   (println "done"))
 
@@ -134,8 +132,8 @@
       (let [sent-message (users/send-message! from to message)
             encoded-message (json/generate-string sent-message)]
         (println "succeeded")
-        (if-let [clients (get @📲 to)] (doall (map #(http-kit/send! % encoded-message) clients)))
-        (if-let [clients (get @📲 from)] (doall (map #(http-kit/send! % encoded-message) clients))))
+        (if-let [recipient-client (-> @📲 (get to) (get (str from ":chat")))] (http-kit/send! recipient-client encoded-message))
+        (if-let [sender-client (-> @📲 (get from) (get (str to ":chat")))] (http-kit/send! sender-client encoded-message)))
       (println "failed"))))
 ;; I want to write a macro for these functions since they're all of form gather data->check if authenticated->authentication branch
 
@@ -155,12 +153,12 @@
   (http-kit/with-channel req channel
     ;; Turned into map<name->list<channel>> to support multiple clients
     (print req)
-    (save-client req channel) ; security issue here do not want to notify unauthorized clients
+    (save-client req (-> req :params :with-user (str ":chat")) channel) ; security issue here do not want to notify unauthorized clients
     (send-recent-messages! req channel)
     (http-kit/on-receive channel #(on-receive-message % req))
     (http-kit/on-close channel (fn [_]
                                  ;; Does this disconnect other websockets from the same IP (ie. status)
-                                 (remove-client req channel)))))
+                                 (remove-client req (-> req :params :with-user (str ":chat")))))))
 
 (defn get-chat-history [req]
   (let [auth-token (get-auth-token req)
@@ -202,10 +200,10 @@
   (http-kit/with-channel req channel
                          (println req "\n\n")
                          (println channel "\n\n")
-                         (save-client req channel)
+                         (save-client req "buddylist" channel)
                          (send-buddies! req channel)
                          (http-kit/on-receive channel #(on-receive-status-update req %))
-                         (http-kit/on-close channel (fn [_] remove-client req channel))))
+                         (http-kit/on-close channel (fn [_] (remove-client req "buddylist")))))
 
 (defn render-create-buddies [req]
   (let [auth-token (get-auth-token req)
