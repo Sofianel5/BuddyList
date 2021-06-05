@@ -5,10 +5,20 @@
             [compojure.route :as route]
             [org.httpkit.server :as http-kit]
             [ring.util.response :as response]
+            [ring.middleware.reload :refer [wrap-reload]]
             [ring.middleware.keyword-params :refer [wrap-keyword-params]]
             [ring.middleware.params :refer [wrap-params]]
             ;[ring.middleware.anti-forgery :refer [wrap-anti-forgery]]
-            [ring.middleware.session :refer [wrap-session]]))
+            [ring.middleware.session :refer [wrap-session]]
+            [ring.middleware.multipart-params :refer [wrap-multipart-params]]
+            [ring.middleware.json :refer [wrap-json-body]]
+            [nrepl.server :as nrepl-server]
+            refactor-nrepl.middleware
+            [cider.nrepl :as cider-nrepl]
+            [slingshot.slingshot :refer :all]
+            [try-let :refer :all]))
+
+(println "rerunning core")
 
 ; Should I persist this?
 (def 📲 (atom {}))
@@ -67,20 +77,11 @@
 
 (defn render-sign-up [req]
   (println (pr-str req))
-  (let [{:keys [username cleartext-password phone]} (-> req :params)
-        user (users/create-user! username cleartext-password phone)]
-    (print user)
-    (if user
-      (json-response (clean-user user) 201)
-      (json-response {:status "failed"} 400))))
-
-(comment
-  (render-sign-up {:params {:username "test"
-                            :cleartext-password "password"
-                            :phone "555-555-5555"}})
-  (render-sign-up {:params {:username "bruhhhh"
-                            :cleartext-password "password"
-                            :phone "555-565-5555"}}))
+  (try+-let [{:keys [username cleartext-password phone email first-name last-name]} (-> req :params)
+             user (users/create-user! username cleartext-password phone email first-name last-name)]
+            (json-response (clean-user user) 201)
+            (catch Object _
+              (json-response (:object &throw-context) 400))))
 
 (defn render-log-in [req]
   (let [_ (println req)
@@ -89,10 +90,6 @@
     (if user
       (json-response (clean-user user) 200)
       (json-response {:status "failed"} 400))))
-
-(comment
-  (render-log-in {:params {:username "bruhhhh" :password "password"}})
-  (render-log-in {:params {:username "sofiane" :password "wrongpassword"}}))
 
 (defn render-update-user [req]
   (let [auth-token (get-auth-token req)
@@ -110,9 +107,6 @@
       (json-response (clean-user (users/set-status! username new-status)) 201)
       (json-response {:status "failed"} 400))))
 
-(comment
-  (render-set-status {:params {:username "sofiane" :new-status "Still coding BuddyList"} :headers {:Authorization "2b6f0364-a2f8-443f-a358-9e80d6d8c159"}}))
-
 (defn on-receive-message [data req]
   (println "on-receive-message\n")
   (println "Data: " data "\n\n")
@@ -120,7 +114,7 @@
   (let [data (json/parse-string data true)
         _ (println data "\n\n")
         message (:message data)
-        to (-> req :params :with-user)
+        to (:to data)
         from (get-request-user req)
         _ (println message to from "\n\n")
         auth-token (get-auth-token req)
@@ -128,17 +122,15 @@
         user (users/authenticate-user from auth-token)
         _ (println user "\n\n")]
     ;; Should I send back the entire convo history or just the recent message? Will clients have to save records locally? What if a new client connects?
+    ;; TODO: Also verify that the "to" is in the user's buddylist
     (if user
       (let [sent-message (users/send-message! from to message)
             encoded-message (json/generate-string sent-message)]
         (println "succeeded")
-        (if-let [recipient-client (-> @📲 (get to) (get (str from ":chat")))] (http-kit/send! recipient-client encoded-message))
-        (if-let [sender-client (-> @📲 (get from) (get (str to ":chat")))] (http-kit/send! sender-client encoded-message)))
+        (if-let [recipient-client (-> @📲 (get to) (get "chat"))] (http-kit/send! recipient-client encoded-message))
+        (if-let [sender-client (-> @📲 (get from) (get "chat"))] (http-kit/send! sender-client encoded-message)))
       (println "failed"))))
 ;; I want to write a macro for these functions since they're all of form gather data->check if authenticated->authentication branch
-
-(comment
-  (on-receive-message "{\"to\": \"liam\", \"from\": \"sofiane\", \"message\": \"hello there\"}" {:headers {"authorization" "2b6f0364-a2f8-443f-a358-9e80d6d8c159"}}))
 
 (defn send-recent-messages! [req channel]
   (let [auth-token (get-auth-token req)
@@ -153,22 +145,22 @@
   (http-kit/with-channel req channel
     ;; Turned into map<name->list<channel>> to support multiple clients
     (print req)
-    (save-client req (-> req :params :with-user (str ":chat")) channel) ; security issue here do not want to notify unauthorized clients
-    (send-recent-messages! req channel)
+    (save-client req "chat" channel) ; security issue here do not want to notify unauthorized clients
     (http-kit/on-receive channel #(on-receive-message % req))
     (http-kit/on-close channel (fn [_]
                                  ;; Does this disconnect other websockets from the same IP (ie. status)
-                                 (remove-client req (-> req :params :with-user (str ":chat")))))))
+                                 (remove-client req "chat")))))
 
 (defn get-chat-history [req]
   (let [auth-token (get-auth-token req)
         username (get-request-user req)
         user (users/authenticate-user username auth-token)]
-    (if user 
-      (let [req-data (-> req :data (json/generate-string true))
-            buddy (:buddy req-data)
-            {:keys [start offset] :or {start 0 offset 25}} req-data
+    (if user
+      (let [buddy (-> req :params :buddy)
+            {:keys [start offset] :or {start 0 offset 25}} (:params req)
+            [start offset] (map #(Integer/parseInt %) [start offset])
             convo-history (users/get-convo username buddy start offset)]
+        (println "history:" convo-history)
         (json-response convo-history))
       (json-response {:status "failed"} 400))))
 
@@ -186,7 +178,7 @@
          doall
          (keep deref))))
 
-(defn on-receive-status-update [req data] 
+(defn on-receive-status-update [req data]
   (println "received update" data)
   (println "clients " @📲)
   (let [auth-token (get-auth-token req)
@@ -194,16 +186,16 @@
         user (users/authenticate-user username auth-token)
         new-status (-> data (json/parse-string true) :new-status)]
     (if user (let [user (users/set-status! (:username user) new-status)]
-      (notify-status-change username new-status)))))
+               (notify-status-change username new-status)))))
 
-(defn buddylist-handler [req] 
+(defn buddylist-handler [req]
   (http-kit/with-channel req channel
-                         (println req "\n\n")
-                         (println channel "\n\n")
-                         (save-client req "buddylist" channel)
-                         (send-buddies! req channel)
-                         (http-kit/on-receive channel #(on-receive-status-update req %))
-                         (http-kit/on-close channel (fn [_] (remove-client req "buddylist")))))
+    (println req "\n\n")
+    (println channel "\n\n")
+    (save-client req "buddylist" channel)
+    (send-buddies! req channel)
+    (http-kit/on-receive channel #(on-receive-status-update req %))
+    (http-kit/on-close channel (fn [_] (remove-client req "buddylist")))))
 
 (defn render-create-buddies [req]
   (let [auth-token (get-auth-token req)
@@ -212,11 +204,36 @@
         user (users/authenticate-user username auth-token)]
     (if user
       (if-let [_ (users/create-buddies! username new-buddy)]
-        (json-response {:status "succeeded"} 200)
+        ;; TODO: Notify receiver on websocket
+        (do
+          (notify-user username "buddylist" (json/generate-string (users/get-buddies username)))
+          (notify-user (:username new-buddy) "buddylist" (json/generate-string (users/get-buddies (:username new-buddy))))
+          (json-response {:status "succeeded"} 200))
         (json-response {:status "failed"} 400)))))
 
+(defn render-set-pfp [req]
+  (let [auth-token (get-auth-token req)
+        username (get-request-user req)]
+    (if-let [_ (users/authenticate-user username auth-token)]
+      (let [user (users/set-profile-picture username (-> req :params :image :tempfile))]
+        (notify-status-change (:username user) (:status user))
+        (json-response (clean-user user) 201))
+      (json-response {:status "failed"} 400))))
+
+(defn render-rearrange-buddies [req]
+  (println req)
+  (println (-> req :body :new-buddies-order) (type (-> req :body :new-buddies-order)))
+  (let [auth-token (get-auth-token req)
+        username (get-request-user req)]
+    (if-let [_ (users/authenticate-user username auth-token)]
+      (if-let [new-buddies-order (-> req :body :new-buddies-order)]
+        (if-let [user (users/rearrange-buddies username new-buddies-order)]
+          (json-response (clean-user user) 201)
+          (json-response {:status "failed" :reason "error setting"} 400))
+        (json-response {:status "failed" :reason "no new buddies order"} 400))
+      (json-response {:status "failed" :reason "invalid credentials"} 400))))
+
 (defroutes all-routes
-  ;; How do I write a macro that wraps each function (the last element of each list below) in a call to wrap-json-body
   (GET "/" [] render-index)
   (POST "/signup" [] render-sign-up)
   (POST "/login" [] render-log-in)
@@ -226,14 +243,31 @@
   (POST "/add-buddy" [] render-create-buddies)
   (GET "/buddies" [] buddylist-handler)
   (POST "/set-status" [] render-set-status)
+  (POST "/set-pfp" [] render-set-pfp)
+  (POST "/rearrange-buddies" [] render-rearrange-buddies)
   (route/not-found "<p>Page not found.</p>")) ;; all other, return 404
 
-(def app (-> all-routes 
+(def app (-> all-routes
              ring.middleware.keyword-params/wrap-keyword-params
              ring.middleware.params/wrap-params
+             ring.middleware.multipart-params/wrap-multipart-params
+             (ring.middleware.json/wrap-json-body {:keywords? true})
              ;ring.middleware.anti-forgery/wrap-anti-forgery
-             ring.middleware.session/wrap-session))
+             ring.middleware.session/wrap-session
+             ring.middleware.reload/wrap-reload))
+
+(defn start-repl! []
+  (let [handler (apply nrepl-server/default-handler
+                       (map resolve
+                            (concat cider-nrepl/cider-middleware
+                                    '[refactor-nrepl.middleware/wrap-refactor])))]
+    (nrepl-server/start-server :bind "0.0.0.0"
+                               :port 4004
+                               :handler handler)))
+
+
 (defn -main [& args]
-  (let [p 8000];; What is the point of #' - Clojure docs say that its a "var quote" but I don't know why we need to call var on a function that's already defined
+  (start-repl!)
+  (let [p 8000]
     (http-kit/run-server #'app {:ip "0.0.0.0", :port p})
     (println "Server running on port" p)))
