@@ -132,14 +132,15 @@
       (println "failed"))))
 ;; I want to write a macro for these functions since they're all of form gather data->check if authenticated->authentication branch
 
-(defn send-recent-messages! [req channel]
-  (let [auth-token (get-auth-token req)
-        username (get-request-user req)
-        with-user (-> req :params :with-user)
-        user (users/authenticate-user username auth-token)]
-    (if user (let [convo-history (users/get-recent-messages username with-user 25)
-                   encoded (json/generate-string convo-history)]
-               (http-kit/send! channel encoded)))))
+(comment
+  (let [from "liam"
+        to "sofiane"
+        message "test as liam 8"
+        sent-message (users/send-message! from to message)
+        encoded-message (json/generate-string sent-message)]
+    (println "succeeded")
+    (if-let [recipient-client (-> @📲 (get to) (get "chat"))] (http-kit/send! recipient-client encoded-message) (println "cannot assoc recpipent"))
+    (if-let [sender-client (-> @📲 (get from) (get "chat"))] (http-kit/send! sender-client encoded-message) (println "cannot assoc sender"))))
 
 (defn chat-handler [req]
   (http-kit/with-channel req channel
@@ -185,8 +186,14 @@
         username (get-request-user req)
         user (users/authenticate-user username auth-token)
         new-status (-> data (json/parse-string true) :new-status)]
-    (if user (let [user (users/set-status! (:username user) new-status)]
+    (if user (let [_ (users/set-status! (:username user) new-status)]
                (notify-status-change username new-status)))))
+
+(comment
+   (let [new-status "some really long status just to see how the client will render it. \nsome really long status just to see how the client will render it."
+         username "liam"
+         _ (users/set-status! username new-status)]
+     (notify-status-change username new-status)))
 
 (defn buddylist-handler [req]
   (http-kit/with-channel req channel

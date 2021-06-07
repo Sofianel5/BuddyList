@@ -9,6 +9,8 @@
             [buddylist.storage :as store])
   (:import org.mindrot.jbcrypt.BCrypt))
 
+(def admin-username "sofiane")
+
 (def users (duratom/duratom :local-file
                             :file-path (doto (io/file "./data/users.duratom")
                                          (io/make-parents))
@@ -62,6 +64,13 @@
                                 (map str/capitalize)
                                 str/join))
 
+;; TODO: Do nothing if buddies exist
+; Should it be a list of vector?
+(defn create-buddies! [username-one username-two]
+  (if (contains? @buddies #{username-one username-two}) nil (do (swap! buddies assoc #{username-one username-two} [])
+                                                                (swap! users update-in [username-one :buddies] conj username-two)
+                                                                (swap! users update-in [username-two :buddies] conj username-one))))
+
 ;; returns new user map
 ;; TODO: Validate username, password, phone
 (defn create-user! [username cleartext-password phone email first-name last-name]
@@ -81,13 +90,16 @@
                                                    :status nil
                                                    :profile-pic nil}]
                                          (swap! users assoc username user)
+                                         (create-buddies! (:username user) admin-username)
                                          user)
         ; Should probably throw
         (throw+ validation-res))))
 
 (defn delete-user! [username]
   (swap! buddies dissoc-by #(contains? % username))
-  (swap! users dissoc username))
+  (swap! users dissoc username)
+  ;TODO: remove from users' buddy lists
+)
 
 (comment
   (def username "sofiane")
@@ -118,13 +130,6 @@
         (set-auth-token! (:username user) (gen-auth-token))
         user)
       nil)))
-
-;; TODO: Do nothing if buddies exist
-; Should it be a list of vector?
-(defn create-buddies! [username-one username-two]
-  (if (contains? @buddies #{username-one username-two}) nil (do (swap! buddies assoc #{username-one username-two} [])
-                                                                (swap! users update-in [username-one :buddies] conj username-two)
-                                                                (swap! users update-in [username-two :buddies] conj username-one))))
 
 (defn remove-buddies! [username-one username-two]
   (swap! buddies dissoc #{username-one username-two})
